@@ -62,8 +62,8 @@ class TipBot:
         self.bot = Bot(bot_token)
         self.wallet_api = wallet_api
         # Firo Butler Initialization.
-        client = MongoClient(connectionString)
-        db = client.get_default_database()
+        self.client = MongoClient(connectionString)
+        db = self.client.get_default_database()
         self.col_captcha = db['captcha']
         self.col_commands_history = db['commands_history']
         self.col_users = db['users']
@@ -392,7 +392,7 @@ class TipBot:
                 for unused_mnt in unused_mints:
                     try:
                         if unused_mnt['txid'] == _tx['txid']:
-                            with client.start_session() as session:
+                            with self.client.start_session() as session:
                                 with session.start_transaction():
                                     try:
                                         sparkcoin_addr = wallet_api.get_spark_coin_address(unused_mnt['txid'])
@@ -536,7 +536,7 @@ class TipBot:
                 return
 
             # Atomic operation to lock the user's balance and update it.
-            with client.start_session() as session:
+            with self.client.start_session() as session:
                 with session.start_transaction():
                     user = self.col_users.find_one_and_update(
                         {"_id": self.user_id, "Balance": {"$gte": total_amount}},
@@ -630,7 +630,7 @@ class TipBot:
                 self.send_message(self.user_id, "<b>You can't send tips to yourself!</b>", parse_mode='HTML')
                 return
 
-            with client.start_session() as session:
+            with self.client.start_session() as session:
                 with session.start_transaction():
                     _user_receiver = self.col_users.find_one({"_id": user_id}, session=session)
                     if not _user_receiver or _user_receiver['IsVerified'] is False:
@@ -967,7 +967,7 @@ class TipBot:
 
     def catch_envelope(self, envelope_id):
         try:
-            with client.start_session() as session:
+            with self.client.start_session() as session:
                 with session.start_transaction():
                     envelope = self.col_envelopes.find_one({"_id": envelope_id}, session=session)
                     _is_envelope_exist = envelope is not None
@@ -992,9 +992,9 @@ class TipBot:
                             catch_amount = envelope['remains']
                         else:
                             if len(envelope['takers']) < 5:
-                                catch_amount = to_decimal(random.uniform(minimal_amount, envelope['remains'] / 2))
+                                catch_amount = to_decimal(random.uniform(float(minimal_amount), envelope['remains'] / 2))
                             else:
-                                catch_amount = to_decimal(random.uniform(minimal_amount, envelope['remains']))
+                                catch_amount = to_decimal(random.uniform(float(minimal_amount), envelope['remains']))
 
                         new_remains = envelope['remains'] - catch_amount
                         if new_remains < 0:
@@ -1047,7 +1047,7 @@ class TipBot:
                                 disable_web_page_preview=True,
                                 parse_mode='HTML'
                             )
-                        except Exception:
+                        except Exception as exc:
                             logger.error(exc, exc_info=True)
 
                         self.answer_call_back(text="✅YOU CAUGHT %s Firo from ENVELOPE✅️" % catch_amount,
